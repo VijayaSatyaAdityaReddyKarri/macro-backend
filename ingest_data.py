@@ -3,15 +3,15 @@ from sqlalchemy import create_engine, text
 import requests
 import io
 
-# --- 1. SETUP DATABASE CONNECTION ---
-db_user = 'postgres'
-db_password = 'Qwertyuiop12$$'  
-db_host = 'localhost'
-db_port = '5432'
-db_name = 'macro_db'
+# --- 1. SETUP CLOUD DATABASE CONNECTION ---
+# PASTE YOUR RENDER EXTERNAL URL INSIDE THE QUOTES BELOW:
+DB_URL = "postgresql://macro_db_user:EsPeDrAbYp87RhhnLKmk0QzhbrbJyo07@dpg-d60kc5t6ubrc73876i20-a.oregon-postgres.render.com/macro_db"
 
-connection_str = f'postgresql+psycopg2://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
-engine = create_engine(connection_str)
+# FIX: Python needs 'postgresql://', but Render gives 'postgres://'
+if DB_URL.startswith("postgres://"):
+    DB_URL = DB_URL.replace("postgres://", "postgresql://", 1)
+
+engine = create_engine(DB_URL)
 
 series_map = [
     {
@@ -55,11 +55,16 @@ def ingest_data():
         print(f"\nProcessing: {item['title']} ({slug})...")
 
         try:
-            # --- 1. CLEANUP (Child -> Parent) ---
-            with engine.connect() as conn:
-                conn.execute(text(f"DELETE FROM observations WHERE series_slug = '{slug}'"))
-                conn.execute(text(f"DELETE FROM series_registry WHERE slug = '{slug}'"))
-                conn.commit()
+    
+            # --- 1. CLEANUP (Safe Mode) ---
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text(f"DELETE FROM observations WHERE series_slug = '{slug}'"))
+                    conn.execute(text(f"DELETE FROM series_registry WHERE slug = '{slug}'"))
+                    conn.commit()
+            except Exception:
+                print(f"   (Skipping cleanup - tables probably don't exist yet)")
+                pass
 
             # --- 2. INSERT METADATA ---
             df_meta = pd.DataFrame([item])
